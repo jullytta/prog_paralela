@@ -1,3 +1,7 @@
+echo "Compilando gerador..."
+echo "g++ gerador_testes.cc -o gerador_testes"
+g++ gerador_testes.cc -o gerador_testes
+echo "Compilado."
 echo "Gerando teste com N = 10e1"
 ./gerador_testes -entrada 10 > testes/10e1.in
 ./gerador_testes -saida testes/10e1.in > testes/10e1.out

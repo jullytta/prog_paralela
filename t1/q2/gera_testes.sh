@@ -1,3 +1,10 @@
+#!/bin/bash
+# Autora: Jullyana M. Vycas (jullytta)
+# Ultima revisao: 02/10/2016
+# Script ridiculamente simples e "forca bruta" que roda o gerador de testes 8 vezes,
+# gerando testes com N = 1, 2, ..., 8
+# O gerador e' recompilado sempre que os testes sao produzidos.
+
 echo "Compilando gerador..."
 echo "g++ gerador_testes.cc -o gerador_testes"
 g++ gerador_testes.cc -o gerador_testes

@@ -16,7 +16,9 @@ int main(int argc, char **argv) {
   double *x, *y;
   double mySUMx, mySUMy, mySUMxy, mySUMxx, SUMx, SUMy, SUMxy,
          SUMxx, SUMres, res, slope, y_intercept, y_estimate;
+
   int i,j,n,myid,numprocs,naverage,nremain,mypoints,ishift;
+
   /*int new_sleep (int seconds);*/
   MPI_Status istatus;
   FILE *infile;

@@ -2,9 +2,20 @@
 // Entrada: N pares (x,y) representando pontos
 // Saida: aproximacao da equacao y = x*m + b
 // que passa por esses pontos.
-// Ultima revisão 03/10/2016 
+// Ultima revisão 05/10/2016 
 
 // Feito em cima da versao de Dora Abdullah
+
+// Observacao importante:
+// O enunciado desta questao sugeria enviar os valores
+// de todos os pontos para todos os processos.
+// Contudo, para grandes valores de n a sobrecarga de
+// comunicacao faz a eficiencia cair desastrosamente.
+// Por isso, esse programa pode ser compilado com a flag
+// BCAST_FLAG caso seja desejado seguir a sugestao acima
+// mencionada. Caso contrario, o programa usa MPI_Scatterv,
+// enviando apenas o necessario para cada processo para
+// ganhar eficiencia.
 
 #include <stdlib.h>
 #include <math.h>
@@ -13,7 +24,7 @@
 
 int main(int argc, char **argv) {
 
-  double *x, *y;
+  double *x, *y, *buffer_x, *buffer_y;
   double mySUMx, mySUMy, mySUMxy, mySUMxx, SUMx, SUMy, SUMxy,
          SUMxx, SUMres, res, slope, y_intercept, y_estimate;
 
@@ -44,15 +55,23 @@ int main(int argc, char **argv) {
     #endif
     /* new_sleep (3);*/
     fscanf (infile, "%d", &n);
+
+    #ifndef BCAST_FLAG
+    // Processo raiz aloca memoria para os dois vetores
+    x = (double *) malloc (n*sizeof(double));
+    y = (double *) malloc (n*sizeof(double));   
+    #endif
   }
 
   // Processo raiz envia para todos o valor de n.
   MPI_Bcast(&n, 1, MPI_INT, 0, MPI_COMM_WORLD);
   
+  #ifdef BCAST_FLAG
   // Todos entao podem alocar a memoria necessaria.
   x = (double *) malloc (n*sizeof(double));
   y = (double *) malloc (n*sizeof(double));
-  
+  #endif
+
   // Agora o processo raiz le os dados
   if(myid == 0){
     for (i=0; i<n; i++)
@@ -71,27 +90,74 @@ int main(int argc, char **argv) {
    * Step 2: Process 0 sends x and y 
    * ---------------------------------------------------------- */
 
+  // Os processos precisam saber de que parte sao responsaveis
+  ishift = myid*naverage;
+  mypoints = (myid < numprocs -1) ? naverage : naverage + nremain;
+
+  #ifndef BCAST_FLAG
+  // Os vetores criados abaixo sao necessarios para utilizar
+  // o MPI_Scatterv. Usamos esse scatter porque n nao e'
+  // sempre divisivel por numprocs. O ultimo processo fica
+  // com o trabalho extra.
+
+  // Esse vetor guarda como serao distribuidos os pontos
+  int *distribuicao;
+  distribuicao = (int *) malloc(numprocs*sizeof(int));
+  for(i = 0; i < numprocs-1; i++){
+    distribuicao[i] = naverage;
+  }
+  distribuicao[numprocs-1] = naverage + nremain;
+
+  // Esse vetor guarda onde a parte de cada processo comeca
+  int *deslocamento;
+  deslocamento = (int *) malloc(numprocs*sizeof(int));
+  for(i = 0; i < numprocs; i++){
+    deslocamento[i] = naverage*i;
+  }
+  #endif
+
+  #ifdef BCAST_FLAG
   // O enunciado da questao sugere enviar todos os valores para
   // todos os processos. Parece um desperdicio, mas seguindo a risca:
 
   MPI_Bcast(x, n, MPI_DOUBLE, 0, MPI_COMM_WORLD);
   MPI_Bcast(y, n, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+  #else
 
-  // Os processos precisam saber de que parte sao responsaveis
-  ishift = myid*naverage;
-  mypoints = (myid < numprocs -1) ? naverage : naverage + nremain;
+  // Fazendo de um jeito mais eficiente com scatter:
+  buffer_x = (double *) malloc(mypoints*sizeof(double));
+  buffer_y = (double *) malloc(mypoints*sizeof(double));
+
+  MPI_Scatterv(x, distribuicao, deslocamento,
+               MPI_DOUBLE, buffer_x, mypoints,
+               MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
+  MPI_Scatterv(y, distribuicao, deslocamento,
+               MPI_DOUBLE, buffer_y, mypoints,
+               MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
+  #endif
 
   /* ----------------------------------------------------------
    * Step 3: Each process calculates its partial sum
    * ---------------------------------------------------------- */
   mySUMx = 0; mySUMy = 0; mySUMxy = 0; mySUMxx = 0;
   
+  #ifdef BCAST_FLAG
   for (j=0; j<mypoints; j++) {
     mySUMx = mySUMx + x[ishift+j];
     mySUMy = mySUMy + y[ishift+j];
     mySUMxy = mySUMxy + x[ishift+j]*y[ishift+j];
     mySUMxx = mySUMxx + x[ishift+j]*x[ishift+j];
   }
+  #else
+  for (j=0; j<mypoints; j++) {
+    mySUMx = mySUMx + buffer_x[j];
+    mySUMy = mySUMy + buffer_y[j];
+    mySUMxy = mySUMxy + buffer_x[j]*buffer_y[j];
+    mySUMxx = mySUMxx + buffer_x[j]*buffer_x[j];
+  }  
+  #endif
   
   /* ----------------------------------------------------------
    * Step 4: Process 0 receives partial sums from the others 

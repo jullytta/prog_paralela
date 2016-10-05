@@ -17,6 +17,8 @@ int main(int argc, char **argv) {
   double mySUMx, mySUMy, mySUMxy, mySUMxx, SUMx, SUMy, SUMxy,
          SUMxx, SUMres, res, slope, y_intercept, y_estimate;
 
+  double tempo_inicial, tempo_final;
+
   int i,j,n,myid,numprocs,naverage,nremain,mypoints,ishift;
 
   /*int new_sleep (int seconds);*/
@@ -34,10 +36,12 @@ int main(int argc, char **argv) {
    * Step 1: Process 0 reads data and sends the value of n
    * ---------------------------------------------------------- */
   if (myid == 0) {
+    #ifndef STATS_FLAG
     printf ("Number of processes used: %d\n", numprocs);
     printf ("-------------------------------------\n");
     printf ("The x coordinates on worker processes:\n");
     /* this call is used to achieve a consistent output format */
+    #endif
     /* new_sleep (3);*/
     fscanf (infile, "%d", &n);
   }
@@ -54,6 +58,9 @@ int main(int argc, char **argv) {
     for (i=0; i<n; i++)
       fscanf (infile, "%lf %lf", &x[i], &y[i]);
   }
+
+  // Desconsidera a leitura da entrada no calculo do tempo gasto.
+  tempo_inicial = MPI_Wtime();
 
   /* ---------------------------------------------------------- */
   
@@ -102,6 +109,12 @@ int main(int argc, char **argv) {
   if (myid == 0) {
     slope = ( SUMx*SUMy - n*SUMxy ) / ( SUMx*SUMx - n*SUMxx );
     y_intercept = ( SUMy - slope*SUMx ) / n;
+    
+    
+    tempo_final = MPI_Wtime(); // Computacao concluida.
+    
+    #ifndef STATS_FLAG
+   
     /* this call is used to achieve a consistent output format */
     /*new_sleep (3);*/
     printf ("\n");
@@ -117,12 +130,16 @@ int main(int argc, char **argv) {
       res = y[i] - y_estimate;
       SUMres = SUMres + res*res;
       printf ("   (%6.2lf %6.2lf)      %6.2lf       %6.2lf\n", 
-	      x[i], y[i], y_estimate, res);
+        x[i], y[i], y_estimate, res);
     }
     printf("--------------------------------------------------\n");
     printf("Residual sum = %6.2lf\n", SUMres);
+    // Se queremos apenas stats (no caso, tempo de execucao).
+    #else
+    printf("%lf\t", tempo_final - tempo_inicial);
+    #endif
   }
 
-  /* ----------------------------------------------------------	*/
+  /* ---------------------------------------------------------- */
   MPI_Finalize();
 }

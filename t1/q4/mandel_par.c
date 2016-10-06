@@ -12,13 +12,15 @@
 #include <stdlib.h>
 #include "mpi.h"
 
+#include "bitmap.h"
+
 #define		X_RESN	800       /* x resolution */
 #define		Y_RESN	800       /* y resolution */
 
 typedef struct complextype
-	{
-        float real, imag;
-	} Compl;
+{
+	float real, imag;
+} Compl;
 
 
 void main (int argc, char** argv)
@@ -54,11 +56,14 @@ void main (int argc, char** argv)
         int raiz = 0, tag=50;
         int my_rank, tamanho_vetor;           /* Rank do meu processo */
         int p;                 /* O número de processos */
-        int *pixels, *imagem; //Represento a matriz como um vetor. Os índices [i, j] são acessados por [i*n + j], assumindo-se uma matriz com n linhas.
+        unsigned char *pixels, *imagem; //Represento a matriz como um vetor. Os índices [i, j] são acessados por [i*n + j], assumindo-se uma matriz com n linhas.
         int increment, inicio, fim; /* definem o inicio e fim dos índices de varredura de cada processo */
+        double tempo_inicial, tempo_final; /* Tempos de execução do processo */
         
         /* Permite ao sistema iniciar o  MPI */
 	MPI_Init(&argc, &argv);
+	
+	tempo_inicial=MPI_Wtime(); //Recupero o tempo em que o programa iniciou sua tarefa
 	
 	/* Pega o rank do meu processo */
 	MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
@@ -82,8 +87,8 @@ void main (int argc, char** argv)
 	//Inicialmente, todos os pixels estão em 0, valor que indica que não devem ser impressos
 	//O valor 1 indica que o pixel deve ser impresso na tela
 	tamanho_vetor=increment*Y_RESN;
-	pixels=malloc(tamanho_vetor*sizeof(int)); //matriz de increment linhas por Y_RESN colunas
-
+	pixels=calloc(tamanho_vetor, sizeof(unsigned char)); //matriz de increment linhas por Y_RESN colunas
+	
 	//Faço o cálculo para definir quais pixels são desenhados
 	
 	int cnt=0;
@@ -107,38 +112,25 @@ void main (int argc, char** argv)
 
 			} while (lengthsq < 4.0 && k < 100);
 
-			if (k == 100){
-					cnt++;										
-					pixels[(index*increment) + j]=1; //Indico que este pixel deve ser desenhado
-				} else pixels[(index*increment) + j] = 0;
+			if (k == 100)
+				pixels[(index*Y_RESN) + j]=1; //Indico que este pixel deve ser desenhado		
 
 		}
 		index++;
 	}
-		
-	//Agrupo todos os pixels na matriz imagem	
-	int total=0;
-	MPI_Reduce(&cnt, &total, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
 	
+	//Agrupo todos os pixels na matriz imagem		
 	if(my_rank==raiz)
-		imagem=malloc(tamanho_vetor*p*sizeof(int));
+		imagem=malloc(tamanho_vetor*p*sizeof(unsigned char));
 
-	MPI_Gather(pixels, tamanho_vetor, MPI_INT, imagem, tamanho_vetor, MPI_INT, raiz, MPI_COMM_WORLD);	
-	
-	if(my_rank==raiz){
-		printf("Total de pixels para desenhar: %d\n", total);
-		total=0;
-		for(i=0; i < tamanho_vetor*p; i++){
-			if(imagem[i]==1)
-				total++;
-		}
-		printf("Total calculado: %d\n", total);
+	MPI_Gather(pixels, tamanho_vetor, MPI_CHAR, imagem, tamanho_vetor, MPI_CHAR, raiz, MPI_COMM_WORLD);	
+
+	if(my_rank==raiz){	
+		tempo_final=MPI_Wtime() - tempo_inicial;
+		printf("O programa levou %f segundos para executar com %d processos.\n", tempo_final, p);
 	}
-	
-	MPI_Finalize();
-	exit(0);
 
-//	free(pixels);		
+	free(pixels);		
 	
 	if(my_rank==raiz){
        
@@ -199,23 +191,36 @@ void main (int argc, char** argv)
 		XChangeWindowAttributes(display, win, CWBackingStore | CWBackingPlanes | CWBackingPixel, attr);
 
 		XMapWindow (display, win);
-		XSync(display, 0);
+		XSync(display, 0);		
 	      	 
-		/* Calculate and draw points */
-		int contador=0;
-		//Provavelmente está errado
+		/* Drawing time! */				
+		
 		for(i=0; i < X_RESN; i++) {
 			for(j=0; j < Y_RESN; j++)
-				if (imagem[(i*X_RESN)+ j]!=0){ XDrawPoint (display, win, gc, i, j);
-			       		contador++; 
+				if (imagem[(i*Y_RESN)+ j]!=0){
+					XDrawPoint (display, win, gc, j, i);
+			       		/*
+			       		//Remova este comentário caso a imagem esteja sendo exibida "cortada"
+			       		for(int r=0; r<20; r++)
+				       		printf("%d - %d\n", i, j);
+				       	*/
+			       		
 				}
 		}
-	
-		printf("%d\n", contador);
 		 
 		XFlush (display);
-
-		sleep (30);
+		
+		XWindowAttributes gwa;
+		XGetWindowAttributes(display, win, &gwa);
+   		int width = gwa.width;
+   		int height = gwa.height;
+   		XImage *img = XGetImage(display,win,0,0,width,height,XAllPlanes(),ZPixmap);
+		if (img != NULL){
+			printf("Tela salva em arquivo bitmap."\n");
+			saveXImageToBitmap(img);
+		} else {
+			printf("Não foi possível salvar a tela em um arquivo bitmap.");
+		}		
 	
 	}
 	

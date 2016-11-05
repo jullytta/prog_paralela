@@ -2,3 +2,5 @@ parallel_mat_mult
 serial_mat_mult
 serial_mat_mult.c
 gerador_entrada
+crap.c
+mpi_create_resized.c

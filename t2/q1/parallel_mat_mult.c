@@ -76,23 +76,29 @@ int main (int argc, char *argv[]) {
     meu_tamanho = (meu_ranque < p -1) ? ndivido : ndivido + nresto;
 
     // Em seguida, cada processo aloca memoria para receber
-    float **minhas_linhas = (float **) malloc(meu_tamanho*sizeof(float*));
-    for(i = 0; i < meu_tamanho; i++)
-        minhas_linhas[i] = (float *) malloc(n*sizeof(float));
+    // A alocacao aqui tem um pouquinho de gambiarra para garantir
+    // que a submatriz seja continua na memoria (necessario para
+    // usar o tipo derivado tipo_coluna)
+    float **sub_A, **sub_B;
+    sub_A = malloc(meu_tamanho*sizeof(float*));
+    sub_A[0] = malloc(meu_tamanho*n*sizeof(float));
+    for(i = 1; i < meu_tamanho; i++)
+        sub_A[i] = &(sub_A[0][i*n]);
 
-    float **minhas_colunas = (float **) malloc(n*sizeof(float*));
-    for(j = 0; j < n; j++)
-        minhas_colunas[j] = (float *) malloc(meu_tamanho*sizeof(float));
+    sub_B = malloc(n*sizeof(float*));
+    sub_B[0] = malloc(meu_tamanho*n*sizeof(float));
+    for(j = 1; j < n; j++)
+        sub_B[j] = &(sub_B[0][j*meu_tamanho]);
 
-    // Todos comecam com minhas_linhas e minhas_colunas sendo
+    // Todos comecam com sub_A e sub_B sendo
     // matrizes cheias de zeros
     for(i = 0; i < meu_tamanho; i++)
         for(j = 0; j < n; j++)
-            minhas_linhas[i][j] = 0;
+            sub_A[i][j] = 0;
 
     for(i = 0; i < n; i++)
         for(j = 0; j < meu_tamanho; j++)
-            minhas_colunas[i][j] = 0;
+            sub_B[i][j] = 0;
 
     // Preparacao para o envio:
     // Os vetores criados abaixo sao necessarios para utilizar
@@ -131,31 +137,34 @@ int main (int argc, char *argv[]) {
     }
     #endif
 
-    // TODO(jullytta): trocar recebimento por minhas_colunas
-    MATRIX_T recebimento;
     // O processo raiz distribui as matrizes A e B
+    MPI_Scatterv(A, tamanhos, deslocamentos,
+                 tipo_linha, *sub_A, meu_tamanho,
+                 tipo_linha,
+                 raiz, MPI_COMM_WORLD);
+
     MPI_Scatterv(&B, tamanhos, deslocamentos,
-                 tipo_coluna, &recebimento, meu_tamanho,
+                 tipo_coluna, *sub_B, meu_tamanho,
                  tipo_coluna,
                  raiz, MPI_COMM_WORLD);
 
-    #ifdef DEBUG_FLAG
     // Verifica se as colunas e linhas foram recebidas com sucesso
+    #ifdef DEBUG_FLAG
     // Imprime linhas recebidas
-    printf("Processo %d, minhas linhas:\n", meu_ranque);
+    printf("Processo %d, sub matriz A:\n", meu_ranque);
     for(i = 0; i < meu_tamanho; i++){
         for(j = 0; j < n; j++){
-            printf("%4.1f\t\t", minhas_linhas[i][j]);
+            printf("%4.1f\t\t", sub_A[i][j]);
         }
         printf("\n");
     }
     printf("\n");
 
     // Imprime colunas recebidas
-    printf("Processo %d, minhas colunas:\n", meu_ranque);
+    printf("Processo %d, sub matriz B:\n", meu_ranque);
     for(i = 0; i < n; i++){
         for(j = 0; j < meu_tamanho; j++){
-            printf("%4.1f\t\t", recebimento[i][j]);
+            printf("%4.1f\t\t", sub_B[i][j]);
         }
         printf("\n");
     }
@@ -201,6 +210,7 @@ void Create_Matrix_Types(MPI_Datatype *tipo_linha, MPI_Datatype *tipo_coluna, in
     MPI_Type_commit(&coluna);
     MPI_Type_create_resized(coluna, lim_inf, extensao, tipo_coluna);
     MPI_Type_commit(tipo_coluna);
+
 }
 
 

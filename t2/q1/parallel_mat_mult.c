@@ -17,7 +17,7 @@ typedef float MATRIX_T[MAX_ORDER][MAX_ORDER];
 
 void Create_Column_Type(MPI_Datatype *tipo_coluna, int n, int m);
 void Read_matrix(float **matrix, int n, int m);
-void Parallel_matrix_mult(MATRIX_T A, MATRIX_T B, MATRIX_T C, int n);
+void Matrix_mult(float **A, float **B, float **C, int l1, int c1, int l2, int c2);
 void Print_matrix(float **matrix, int n, int m);
 void Malloc_matrix(float ***matrix, int n, int m);
 
@@ -81,18 +81,10 @@ int main (int argc, char *argv[]) {
     meu_tamanho = (meu_ranque < p -1) ? ndivido : ndivido + nresto;
 
     // Submatrizes que receberao parte das matrizes originais
-    float **sub_A, **sub_B;
+    float **sub_A, **sub_B, **sub_C;
     Malloc_matrix(&sub_A, meu_tamanho, n);
     Malloc_matrix(&sub_B, n, meu_tamanho);
-
-    // Inicializa sub_A e sub_B com zeros
-    for(i = 0; i < meu_tamanho; i++)
-        for(j = 0; j < n; j++)
-            sub_A[i][j] = 0;
-
-    for(i = 0; i < n; i++)
-        for(j = 0; j < meu_tamanho; j++)
-            sub_B[i][j] = 0;
+    Malloc_matrix(&sub_C, meu_tamanho, meu_tamanho);
 
     // Preparacao para o envio:
     // Os vetores criados abaixo sao necessarios para utilizar
@@ -170,7 +162,7 @@ int main (int argc, char *argv[]) {
     printf("\n");
     #endif
 
-    // Parallel_matrix_mult(A, B, C, n);
+    // Matrix_mult(A, B, C, meu_tamanho, n, n, meu_tamanho);
 
     if(meu_ranque == raiz){
         tempo_final = MPI_Wtime(); // Computacao concluida.
@@ -181,6 +173,9 @@ int main (int argc, char *argv[]) {
         #endif
     }
 
+    MPI_Type_free(&tipo_linha);
+    MPI_Type_free(&tipo_coluna);
+    MPI_Type_free(&tipo_subcoluna);
     MPI_Finalize();
 
     return 0;
@@ -217,22 +212,13 @@ void Read_matrix(float **matrix, int n, int m) {
 
 /*****************************************************************/
 /* MATRIX_T é um array bi-dimensional de floats  */
-void Parallel_matrix_mult(
-        MATRIX_T  A  /* in  */,
-        MATRIX_T  B  /* in  */,
-        MATRIX_T  C  /* out */,
-        int        n  /* in  */) {
+void Matrix_mult(float **A, float **B, float **C, int l1, int c1, int l2, int c2){
+    int i, j, k;
 
-    int i, j, k, p, meu_ranque, raiz = 0;
-
-    MPI_Comm_rank(MPI_COMM_WORLD, &meu_ranque);
-    MPI_Comm_size(MPI_COMM_WORLD, &p);
-
-    // TODO(jullytta): Aqui, cada processo faz apenas a sua parte
-    for (i = 0; i < n; i++){
-        for (j = 0; j < n; j++) {
+    for (i = 0; i < l1; i++){
+        for (j = 0; j < c2; j++) {
             C[i][j] = 0.0;
-            for (k = 0; k < n; k++){
+            for (k = 0; k < c1; k++){
                 C[i][j] = C[i][j] + A[i][k]*B[k][j];
             }
         }

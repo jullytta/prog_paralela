@@ -11,3 +11,4 @@ testes/10000.in
 testes/500.in
 testes/500.out
 testes/5000.in
+parallel_mat_mult_output.txt

@@ -26,6 +26,7 @@ if [ ${#} -ge 2 ] ; then
 fi
 
 # Le o terceiro argumento opcional (entrada, default = nenhuma)
+# TODO(jullytta): mensagem de erro caso a entrada especificada nao seja encontrada
 if [ ${#} -ge 3 ] ; then
   ENTRADA="< ${3}.in"
 fi

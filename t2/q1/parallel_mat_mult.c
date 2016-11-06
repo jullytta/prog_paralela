@@ -13,8 +13,6 @@
 
 #define MAX_ORDER 10
 
-typedef float MATRIX_T[MAX_ORDER][MAX_ORDER];
-
 void Create_Column_Type(MPI_Datatype *tipo_coluna, int n, int m);
 void Read_matrix(float **matrix, int n, int m);
 void Matrix_mult(float **A, float **B, float **C, int l1, int c1, int l2, int c2);
@@ -35,7 +33,7 @@ int main (int argc, char *argv[]) {
     MPI_Comm_size(MPI_COMM_WORLD, &p);
 
     #ifdef GDB_FLAG
-    Attach_debugger(meu_ranque, raiz);
+    Attach_debugger(meu_ranque, 1);
     #endif
 
     if(meu_ranque == raiz){
@@ -132,25 +130,38 @@ int main (int argc, char *argv[]) {
     // numero menor de colunas, portanto o salto tambem e' menor
     Create_Column_Type(&tipo_subcoluna, n, meu_tamanho);
 
-    MPI_Scatterv(*A, tamanhos, deslocamentos,
-                 tipo_linha, *sub_A, meu_tamanho,
-                 tipo_linha, raiz, MPI_COMM_WORLD);
+    /***************** Observacao importante *****************/
+    /* Apesar do sendbuf nao ser significativo fora da raiz, */
+    /* nos ainda estamos lidando com C. Isso significa que   */
+    /* em hipotese alguma deveriamos desreferenciar um       */
+    /* ponteiro que nao tenha um endereco valido, pois isso  */
+    /* seria acessar o valor de uma memoria que nao e' nossa,*/
+    /* resultando em segmentation fault.                     */
+    /*                                                       */
+    /* A alternativa aqui foi fazer um if e desreferenciar   */
+    /* apenas no processo raiz, utilizando NULL para outros  */
+    /* processos.                                            */
+    /*********************************************************/
 
-// Uma parte do programa que eu nao consigo apagar
-// TODO(jullytta): remover esse bloco de codigo sem gerar seg fault
-// Resultados da investigacao com GDB:
-// Sem essa parte do codigo, o endereco de B fica como 0xffffff...,
-// ou seja, invalido, para o processo 1.\
-// Por algum motivo estranho, isso causa seg fault?
-// Achei que os outros processos nao precisavam
-// alocar espaco para A e B
-    if(meu_ranque == 1)
-        Malloc_matrix(&B, n, n);
-
-    MPI_Scatterv(*B, tamanhos, deslocamentos,
-                 tipo_coluna, *sub_B, meu_tamanho,
-                 tipo_subcoluna, raiz, MPI_COMM_WORLD);
-
+    if(meu_ranque == raiz){
+        MPI_Scatterv(*A, tamanhos, deslocamentos,
+                     tipo_linha, *sub_A, meu_tamanho,
+                     tipo_linha, raiz, MPI_COMM_WORLD);
+        
+        MPI_Scatterv(*B, tamanhos, deslocamentos,
+                     tipo_coluna, *sub_B, meu_tamanho,
+                     tipo_subcoluna, raiz, MPI_COMM_WORLD);
+    }
+    else {
+        MPI_Scatterv(NULL, tamanhos, deslocamentos,
+                     tipo_linha, *sub_A, meu_tamanho,
+                     tipo_linha, raiz, MPI_COMM_WORLD);
+        
+        MPI_Scatterv(NULL, tamanhos, deslocamentos,
+                     tipo_coluna, *sub_B, meu_tamanho,
+                     tipo_subcoluna, raiz, MPI_COMM_WORLD);
+    }
+    
     // Verifica se as colunas e linhas foram recebidas com sucesso
     #ifdef DEBUG_FLAG
     // Imprime linhas recebidas

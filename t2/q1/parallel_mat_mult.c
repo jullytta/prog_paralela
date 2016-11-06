@@ -20,7 +20,7 @@ void Read_matrix(float **matrix, int n, int m);
 void Matrix_mult(float **A, float **B, float **C, int l1, int c1, int l2, int c2);
 void Print_matrix(float **matrix, int n, int m);
 void Malloc_matrix(float ***matrix, int n, int m);
-
+void Attach_debugger(int meu_ranque, int processo_objetivo);
 
 int main (int argc, char *argv[]) {
     int i, j, n, p, meu_ranque, raiz = 0;
@@ -33,6 +33,10 @@ int main (int argc, char *argv[]) {
     MPI_Init(&argc, &argv);
     MPI_Comm_rank(MPI_COMM_WORLD, &meu_ranque);
     MPI_Comm_size(MPI_COMM_WORLD, &p);
+
+    #ifdef GDB_FLAG
+    Attach_debugger(meu_ranque, raiz);
+    #endif
 
     if(meu_ranque == raiz){
         // Le a ordem das matrizes
@@ -134,16 +138,14 @@ int main (int argc, char *argv[]) {
 
 // Uma parte do programa que eu nao consigo apagar
 // TODO(jullytta): remover esse bloco de codigo sem gerar seg fault
-{
-    MPI_Aint lim_inf, extensao;
-    MPI_Type_get_extent(MPI_FLOAT, &lim_inf, &extensao);
-    MPI_Datatype coluna_recebida, tipo_coluna_recebida;
-    MPI_Type_vector(n, 1, meu_tamanho, MPI_FLOAT, &coluna_recebida);
-    MPI_Type_commit(&coluna_recebida);
-    MPI_Type_create_resized(coluna_recebida, lim_inf, extensao, &tipo_coluna_recebida);
-    MPI_Type_commit(&tipo_coluna_recebida);
-}
-// gente socorro
+// Resultados da investigacao com GDB:
+// Sem essa parte do codigo, o endereco de B fica como 0xffffff...,
+// ou seja, invalido, para o processo 1.\
+// Por algum motivo estranho, isso causa seg fault?
+// Achei que os outros processos nao precisavam
+// alocar espaco para A e B
+    if(meu_ranque == 1)
+        Malloc_matrix(&B, n, n);
 
     MPI_Scatterv(*B, tamanhos, deslocamentos,
                  tipo_coluna, *sub_B, meu_tamanho,
@@ -162,7 +164,16 @@ int main (int argc, char *argv[]) {
     printf("\n");
     #endif
 
-    // Matrix_mult(A, B, C, meu_tamanho, n, n, meu_tamanho);
+    Matrix_mult(sub_A, sub_B, sub_C, meu_tamanho, n, n, meu_tamanho);
+
+    #ifdef DEBUG_FLAG
+    // Imprime sub matriz resultado
+    printf("Processo %d, sub matriz C:\n", meu_ranque);
+    Print_matrix(sub_C, meu_tamanho, meu_tamanho);
+    printf("\n");
+    #endif
+
+    // TODO(jullytta): juntar todas as sub_C na C resultado!
 
     if(meu_ranque == raiz){
         tempo_final = MPI_Wtime(); // Computacao concluida.
@@ -248,3 +259,17 @@ void Malloc_matrix(float ***matrix, int n, int m){
     for(i = 1; i < n; i++)
         (*matrix)[i] = &((*matrix)[0][i*m]);
 } /* Malloc_matrix */
+
+/*****************************************************************/
+/* Essa funcao 'trava' o processo indicado por processo_objetivo */
+/* para possibilitar a conexao deste processo com o debugger     */
+/* Modifique manualmente a variavel attached para continuar      */
+void Attach_debugger(int meu_ranque, int processo_objetivo){
+    int attached = 0;
+
+    if(meu_ranque == processo_objetivo){
+        while(!attached){
+            sleep(1);
+        }
+    }
+} /* Attach_debugger */

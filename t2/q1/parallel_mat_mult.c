@@ -24,7 +24,7 @@ int main (int argc, char *argv[]) {
     float **A;
     float **B;
     float **C;
-    MPI_Datatype tipo_linha, tipo_coluna, tipo_subcoluna;
+    MPI_Datatype tipo_coluna, tipo_subcoluna;
 
     MPI_Init(&argc, &argv);
     MPI_Comm_rank(MPI_COMM_WORLD, &meu_ranque);
@@ -60,19 +60,37 @@ int main (int argc, char *argv[]) {
     }
     #endif
 
+    // Se fossemos enviar linhas de matrizes, usariamos o
+    // tipo derivado abaixo. Como nao vamos, ele esta
+    // comentado.
+    // MPI_Datatype tipo_linha;
+    // MPI_Type_contiguous(n, MPI_FLOAT, &tipo_linha);
+    // MPI_Type_commit(&tipo_linha);
+
     // Desconsidera a leitura da entrada no calculo do tempo gasto.
     tempo_inicial = MPI_Wtime();
     
     // Todos os processos precisam saber qual a ordem das matrizes
     MPI_Bcast(&n, 1, MPI_INT, raiz, MPI_COMM_WORLD);
 
-    // Cria o tipo linha, que e' continuo
-    MPI_Type_contiguous(n, MPI_FLOAT, &tipo_linha);
-    MPI_Type_commit(&tipo_linha);
-    
+    // Agora os processos nao raiz ja podem alocar espaco para A
+    if(meu_ranque != raiz)
+        Malloc_matrix(&A, n, n);
+
+    // Todos os processos terao sua copia de A
+    MPI_Bcast(*A, n*n, MPI_FLOAT, raiz, MPI_COMM_WORLD);
+
+    #ifdef DEBUG_FLAG
+    if(meu_ranque != raiz){
+        printf("Processo %d, matriz A:\n", meu_ranque);
+        Print_matrix(A, n, n);
+        printf("\n");
+    }
+    #endif
+
     Create_Column_Type(&tipo_coluna, n, n);
 
-    // Cada processo calcula quantas linhas e colunas recebera
+    // Cada processo calcula quantas colunas de B recebera
     int ndivido, nresto, meu_tamanho, meu_inicio;
     ndivido = n/p;
     nresto = n % p;
@@ -80,11 +98,10 @@ int main (int argc, char *argv[]) {
     // O ultimo processo pega as sobras
     meu_tamanho = (meu_ranque < p -1) ? ndivido : ndivido + nresto;
 
-    // Submatrizes que receberao parte das matrizes originais
-    float **sub_A, **sub_B, **sub_C;
-    Malloc_matrix(&sub_A, meu_tamanho, n);
+    // Submatrizes para cada processo
+    float **sub_B, **sub_C;
     Malloc_matrix(&sub_B, n, meu_tamanho);
-    Malloc_matrix(&sub_C, meu_tamanho, meu_tamanho);
+    Malloc_matrix(&sub_C, n, meu_tamanho);
 
     // Preparacao para o envio:
     // Os vetores criados abaixo sao necessarios para utilizar
@@ -144,59 +161,47 @@ int main (int argc, char *argv[]) {
     /* apenas no processo raiz, utilizando NULL para outros  */
     /* processos.                                            */
     /*********************************************************/
-    if(meu_ranque == raiz){
-        MPI_Scatterv(*A, tamanhos, deslocamentos,
-                     tipo_linha, *sub_A, meu_tamanho,
-                     tipo_linha, raiz, MPI_COMM_WORLD);
-        
+    if(meu_ranque == raiz){        
         MPI_Scatterv(*B, tamanhos, deslocamentos,
                      tipo_coluna, *sub_B, meu_tamanho,
                      tipo_subcoluna, raiz, MPI_COMM_WORLD);
     }
     else {
         MPI_Scatterv(NULL, tamanhos, deslocamentos,
-                     tipo_linha, *sub_A, meu_tamanho,
-                     tipo_linha, raiz, MPI_COMM_WORLD);
-        
-        MPI_Scatterv(NULL, tamanhos, deslocamentos,
                      tipo_coluna, *sub_B, meu_tamanho,
                      tipo_subcoluna, raiz, MPI_COMM_WORLD);
     }
 
-    // Para verificar linhas e colunas recebidas
     #ifdef DEBUG_FLAG
-    // Imprime linhas recebidas
-    printf("Processo %d, sub matriz A:\n", meu_ranque);
-    Print_matrix(sub_A, meu_tamanho, n);
-    printf("\n");
-
     // Imprime colunas recebidas
     printf("Processo %d, sub matriz B:\n", meu_ranque);
     Print_matrix(sub_B, n, meu_tamanho);
     printf("\n");
     #endif
 
-    Matrix_mult(sub_A, sub_B, sub_C, meu_tamanho, n, n, meu_tamanho);
+    Matrix_mult(A, sub_B, sub_C, n, n, n, meu_tamanho);
 
     #ifdef DEBUG_FLAG
     // Imprime sub matriz resultado
     printf("Processo %d, sub matriz C:\n", meu_ranque);
-    Print_matrix(sub_C, meu_tamanho, meu_tamanho);
+    Print_matrix(sub_C, n, meu_tamanho);
     printf("\n");
     #endif
 
-    // TODO(jullytta): juntar todas as sub_C na C resultado!
+    MPI_Gatherv(*sub_C, meu_tamanho, tipo_subcoluna,
+                *C, tamanhos, deslocamentos,
+                tipo_coluna, raiz, MPI_COMM_WORLD);
 
     if(meu_ranque == raiz){
         tempo_final = MPI_Wtime(); // Computacao concluida.
         #ifndef STATS_FLAG
-        // Print_matrix(C, n, n);
+        Print_matrix(C, n, n);
         #else
         printf("%lf\t", tempo_final - tempo_inicial);
         #endif
     }
 
-    MPI_Type_free(&tipo_linha);
+    // MPI_Type_free(&tipo_linha);
     MPI_Type_free(&tipo_coluna);
     MPI_Type_free(&tipo_subcoluna);
     MPI_Finalize();

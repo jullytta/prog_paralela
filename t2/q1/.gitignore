@@ -5,3 +5,9 @@ gerador_entrada
 crap.c
 mpi_create_resized.c
 teste
+testes/1000.in
+testes/1000.out
+testes/10000.in
+testes/500.in
+testes/500.out
+testes/5000.in

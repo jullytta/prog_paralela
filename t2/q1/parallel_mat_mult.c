@@ -15,37 +15,57 @@
 
 typedef float MATRIX_T[MAX_ORDER][MAX_ORDER];
 
-void Create_Matrix_Types(MPI_Datatype *tipo_linha, MPI_Datatype *tipo_coluna, int n);
-void Read_matrix(char* prompt, MATRIX_T A, int n);
+void Create_Column_Type(MPI_Datatype *tipo_coluna, int n, int m);
+void Read_matrix(float **matrix, int n, int m);
 void Parallel_matrix_mult(MATRIX_T A, MATRIX_T B, MATRIX_T C, int n);
-void Print_matrix(char* title, MATRIX_T C, int n);
+void Print_matrix(float **matrix, int n, int m);
+void Malloc_matrix(float ***matrix, int n, int m);
+
+// A alocacao aqui tem um pouquinho de gambiarra para garantir
+// que a matriz seja continua na memoria (necessario para
+// usar os tipos derivados)
+void Malloc_matrix(float ***matrix, int n, int m){
+    int i;
+    *matrix = malloc(n*sizeof(float*));
+    (*matrix)[0] = malloc(n*m*sizeof(float));
+    for(i = 1; i < n; i++)
+        (*matrix)[i] = &((*matrix)[0][i*m]);
+}
 
 int main (int argc, char *argv[]) {
     int i, j, n, p, meu_ranque, raiz = 0;
     double tempo_inicial, tempo_final;
-    MATRIX_T  A;
-    MATRIX_T  B;
-    MATRIX_T  C;
-    MPI_Datatype tipo_linha, tipo_coluna;
+    float **A;
+    float **B;
+    float **C;
+    MPI_Datatype tipo_linha, tipo_coluna, tipo_subcoluna;
 
     MPI_Init(&argc, &argv);
     MPI_Comm_rank(MPI_COMM_WORLD, &meu_ranque);
     MPI_Comm_size(MPI_COMM_WORLD, &p);
 
     if(meu_ranque == raiz){
+        // Le a ordem das matrizes
         scanf("%d", &n);
-        Read_matrix("Entre A", A, n);
-        Read_matrix("Entre B", B, n);
+
+        // Aloca memoria antes de mais nada
+        Malloc_matrix(&A, n, n);
+        Malloc_matrix(&B, n, n);
+        Malloc_matrix(&C, n, n);
+
+        // Le as matrizes
+        Read_matrix(A, n, n);
+        Read_matrix(B, n, n);
     }
 
     #ifdef DEBUG_FLAG
     if(meu_ranque == 0){
         printf("Matrix A:\n");
-        Print_matrix("", A, n);
+        Print_matrix(A, n, n);
         printf("\n");
         
         printf("Matrix B:\n");
-        Print_matrix("", B, n);
+        Print_matrix(B, n, n);
         printf("\n");
     }
     #endif
@@ -56,42 +76,26 @@ int main (int argc, char *argv[]) {
     // Todos os processos precisam saber qual a ordem das matrizes
     MPI_Bcast(&n, 1, MPI_INT, raiz, MPI_COMM_WORLD);
 
-    // Tipos especiais devem ser inicializados
-    Create_Matrix_Types(&tipo_linha, &tipo_coluna, n);
+    // Cria o tipo linha, que e' continuo
+    MPI_Type_contiguous(n, MPI_FLOAT, &tipo_linha);
+    MPI_Type_commit(&tipo_linha);
+    
+    Create_Column_Type(&tipo_coluna, n, n);
 
     // Cada processo calcula quantas linhas e colunas recebera
     int ndivido, nresto, meu_tamanho, meu_inicio;
     ndivido = n/p;
     nresto = n % p;
-
-    // meu_inicio marca qual linha/coluna e' a primeira para cada
-    // processo. Por exemplo, com 4 processos e matrizes 8x8,
-    // as linhas destinadas ao processo 1 sao A2 e A3
-    // e as colunas B2 e B3.
-    // Assim, o inicio do processo 1 eh 2.
     meu_inicio = meu_ranque * ndivido;
-
-    // Quantidade de linhas/colunas que cada processo e' responsavel
-    // O ultimo processo pega as sobras tambem
+    // O ultimo processo pega as sobras
     meu_tamanho = (meu_ranque < p -1) ? ndivido : ndivido + nresto;
 
-    // Em seguida, cada processo aloca memoria para receber
-    // A alocacao aqui tem um pouquinho de gambiarra para garantir
-    // que a submatriz seja continua na memoria (necessario para
-    // usar o tipo derivado tipo_coluna)
+    // Submatrizes que receberao parte das matrizes originais
     float **sub_A, **sub_B;
-    sub_A = malloc(meu_tamanho*sizeof(float*));
-    sub_A[0] = malloc(meu_tamanho*n*sizeof(float));
-    for(i = 1; i < meu_tamanho; i++)
-        sub_A[i] = &(sub_A[0][i*n]);
+    Malloc_matrix(&sub_A, meu_tamanho, n);
+    Malloc_matrix(&sub_B, n, meu_tamanho);
 
-    sub_B = malloc(n*sizeof(float*));
-    sub_B[0] = malloc(meu_tamanho*n*sizeof(float));
-    for(j = 1; j < n; j++)
-        sub_B[j] = &(sub_B[0][j*meu_tamanho]);
-
-    // Todos comecam com sub_A e sub_B sendo
-    // matrizes cheias de zeros
+    // Inicializa sub_A e sub_B com zeros
     for(i = 0; i < meu_tamanho; i++)
         for(j = 0; j < n; j++)
             sub_A[i][j] = 0;
@@ -137,37 +141,52 @@ int main (int argc, char *argv[]) {
     }
     #endif
 
-    // O processo raiz distribui as matrizes A e B
-    MPI_Scatterv(A, tamanhos, deslocamentos,
-                 tipo_linha, *sub_A, meu_tamanho,
-                 tipo_linha,
-                 raiz, MPI_COMM_WORLD);
+// To tentando deletar o trecho abaixo, mas da seg fault quando o faco
+    int k = 0;
+    float envio[5][5];
+    for(i = 0; i < 5; i++){
+        for(j = 0; j < 5; j++){
+            envio[i][j] = k++;
+        }
+    }
 
-    MPI_Scatterv(&B, tamanhos, deslocamentos,
+    float recibo[5][5];
+    float *recibo2 = (float*) malloc(meu_tamanho*n*sizeof(float));
+// fim
+
+    // Cria o tipo para a coluna da sub matriz
+    // Importante ter um tipo diferente porque a sub matriz tem um
+    // numero menor de colunas, portanto o salto tambem e' menor
+    Create_Column_Type(&tipo_subcoluna, n, meu_tamanho);
+
+    MPI_Scatterv(*A, tamanhos, deslocamentos,
+                 tipo_linha, *sub_A, meu_tamanho,
+                 tipo_linha, raiz, MPI_COMM_WORLD);
+
+// Mais uma parte do programa que eu nao consigo apagar
+    MPI_Aint lim_inf, extensao;
+    MPI_Type_get_extent(MPI_FLOAT, &lim_inf, &extensao);
+    MPI_Datatype coluna_recebida, tipo_coluna_recebida;
+    MPI_Type_vector(n, 1, meu_tamanho, MPI_FLOAT, &coluna_recebida);
+    MPI_Type_commit(&coluna_recebida);
+    MPI_Type_create_resized(coluna_recebida, lim_inf, extensao, &tipo_coluna_recebida);
+    MPI_Type_commit(&tipo_coluna_recebida);
+// gente socorro    
+
+    MPI_Scatterv(*B, tamanhos, deslocamentos,
                  tipo_coluna, *sub_B, meu_tamanho,
-                 tipo_coluna,
-                 raiz, MPI_COMM_WORLD);
+                 tipo_subcoluna, raiz, MPI_COMM_WORLD);
 
     // Verifica se as colunas e linhas foram recebidas com sucesso
     #ifdef DEBUG_FLAG
     // Imprime linhas recebidas
     printf("Processo %d, sub matriz A:\n", meu_ranque);
-    for(i = 0; i < meu_tamanho; i++){
-        for(j = 0; j < n; j++){
-            printf("%4.1f\t\t", sub_A[i][j]);
-        }
-        printf("\n");
-    }
+    Print_matrix(sub_A, meu_tamanho, n);
     printf("\n");
 
     // Imprime colunas recebidas
     printf("Processo %d, sub matriz B:\n", meu_ranque);
-    for(i = 0; i < n; i++){
-        for(j = 0; j < meu_tamanho; j++){
-            printf("%4.1f\t\t", sub_B[i][j]);
-        }
-        printf("\n");
-    }
+    Print_matrix(sub_B, n, meu_tamanho);
     printf("\n");
     #endif
 
@@ -176,7 +195,7 @@ int main (int argc, char *argv[]) {
     if(meu_ranque == raiz){
         tempo_final = MPI_Wtime(); // Computacao concluida.
         #ifndef STATS_FLAG
-        // Print_matrix("O produto é", C, n);
+        // Print_matrix(C, n, n);
         #else
         printf("%lf\t", tempo_final - tempo_inicial);
         #endif
@@ -188,25 +207,17 @@ int main (int argc, char *argv[]) {
 }  /* main */
 
 /*****************************************************************/
-void Create_Matrix_Types(MPI_Datatype *tipo_linha, MPI_Datatype *tipo_coluna, int n){
-    MPI_Datatype linha, coluna;
+void Create_Column_Type(MPI_Datatype *tipo_coluna, int n, int m){
+    MPI_Datatype coluna;
     MPI_Aint lim_inf, extensao;
     
     // Matrizes sao formadas por floats
     MPI_Type_get_extent(MPI_FLOAT, &lim_inf, &extensao);
 
-    // Cria o tipo linha
-    // n linhas, linhas sao blocos de largura n
-    // cada bloco comeca logo depois do outro (1)
-    MPI_Type_vector(n, n, 1, MPI_FLOAT, &linha);
-    MPI_Type_commit(&linha);
-    MPI_Type_create_resized(linha, lim_inf, extensao, tipo_linha);
-    MPI_Type_commit(tipo_linha);
-
     // Cria o tipo coluna
-    // n colunas, colunas sao blocos de largura 1
-    // cada bloco comeca n elementos depois do outro
-    MPI_Type_vector(n, 1, n, MPI_FLOAT, &coluna);
+    // n elementos na coluna, colunas sao blocos de largura 1
+    // cada bloco comeca m elementos depois do outro
+    MPI_Type_vector(n, 1, m, MPI_FLOAT, &coluna);
     MPI_Type_commit(&coluna);
     MPI_Type_create_resized(coluna, lim_inf, extensao, tipo_coluna);
     MPI_Type_commit(tipo_coluna);
@@ -215,15 +226,12 @@ void Create_Matrix_Types(MPI_Datatype *tipo_linha, MPI_Datatype *tipo_coluna, in
 
 
 /*****************************************************************/
-void Read_matrix(
-        char*    prompt  /* in  */,
-        MATRIX_T  A      /* out */,
-        int      n      /* in  */) {
+void Read_matrix(float **matrix, int n, int m) {
     int i, j;
 
     for (i = 0; i < n; i++)
-        for (j = 0; j < n; j++)
-            scanf("%f", &A[i][j]);
+        for (j = 0; j < m; j++)
+            scanf("%f", &matrix[i][j]);
 }  /* Read_matrix */
 
 
@@ -253,15 +261,12 @@ void Parallel_matrix_mult(
 
 
 /*****************************************************************/
-void Print_matrix(
-        char*    title  /* in  */,
-        MATRIX_T  C      /* out */,
-        int      n      /* in  */) {
+void Print_matrix(float **matrix, int n, int m) {
     int i, j;
 
     for (i = 0; i < n; i++) {
-        for (j = 0; j < n; j++)
-            printf("%4.1f\t\t", C[i][j]);
+        for (j = 0; j < m; j++)
+            printf("%4.1f\t\t", matrix[i][j]);
         printf("\n");
     }
-}  /* Read_matrix */
+}  /* Print_matrix */

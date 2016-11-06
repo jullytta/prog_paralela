@@ -2,7 +2,7 @@
 *
 * Entrada: 
 *    n: Ordem das matrizes 
-*    A,B: Matrizes de entrada
+*    A, B: Matrizes de entrada
 * Saída:
 *    C: Matriz produto
 *
@@ -10,8 +10,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "mpi.h"
-
-#define MAX_ORDER 10
 
 void Create_Column_Type(MPI_Datatype *tipo_coluna, int n, int m);
 void Read_matrix(float **matrix, int n, int m);
@@ -125,9 +123,13 @@ int main (int argc, char *argv[]) {
     }
     #endif
 
-    // Cria o tipo para a coluna da sub matriz
-    // Importante ter um tipo diferente porque a sub matriz tem um
-    // numero menor de colunas, portanto o salto tambem e' menor
+    /*********************************************************/
+    /* Note que a submatriz de recepcao, sub_B, nem sempre   */
+    /* tem as mesmas dimensoes que a matriz original, B. Por */
+    /* esse motivo, o salto do tipo coluna correspondente    */
+    /* para essas duas matrizes e' diferente, e precisamos   */
+    /* de um tipo especifico para a coluna recebida.         */
+    /*********************************************************/
     Create_Column_Type(&tipo_subcoluna, n, meu_tamanho);
 
     /***************** Observacao importante *****************/
@@ -142,7 +144,6 @@ int main (int argc, char *argv[]) {
     /* apenas no processo raiz, utilizando NULL para outros  */
     /* processos.                                            */
     /*********************************************************/
-
     if(meu_ranque == raiz){
         MPI_Scatterv(*A, tamanhos, deslocamentos,
                      tipo_linha, *sub_A, meu_tamanho,
@@ -161,8 +162,8 @@ int main (int argc, char *argv[]) {
                      tipo_coluna, *sub_B, meu_tamanho,
                      tipo_subcoluna, raiz, MPI_COMM_WORLD);
     }
-    
-    // Verifica se as colunas e linhas foram recebidas com sucesso
+
+    // Para verificar linhas e colunas recebidas
     #ifdef DEBUG_FLAG
     // Imprime linhas recebidas
     printf("Processo %d, sub matriz A:\n", meu_ranque);
@@ -233,7 +234,11 @@ void Read_matrix(float **matrix, int n, int m) {
 
 
 /*****************************************************************/
-/* MATRIX_T é um array bi-dimensional de floats  */
+/* Multiplica duas matrizes, A e B, sendo A uma matriz l1 x c1 e */
+/* B uma matriz l2 x c2. O resultado e' uma matriz C, l1 x c2.   */
+/* Parte do principio que a memoria para C ja foi devidamente    */
+/* alocada e que c1 == l2.                                       */
+/*****************************************************************/
 void Matrix_mult(float **A, float **B, float **C, int l1, int c1, int l2, int c2){
     int i, j, k;
 
@@ -262,7 +267,8 @@ void Print_matrix(float **matrix, int n, int m) {
 /*****************************************************************/
 /* A alocacao aqui tem um pouquinho de gambiarra para garantir   */
 /* que a matriz seja continua na memoria (necessario para usar   */
-/* os tipos derivados)                                           */
+/* os tipos derivados).                                          */
+/*****************************************************************/
 void Malloc_matrix(float ***matrix, int n, int m){
     int i;
     *matrix = malloc(n*sizeof(float*));
@@ -273,8 +279,9 @@ void Malloc_matrix(float ***matrix, int n, int m){
 
 /*****************************************************************/
 /* Essa funcao 'trava' o processo indicado por processo_objetivo */
-/* para possibilitar a conexao deste processo com o debugger     */
-/* Modifique manualmente a variavel attached para continuar      */
+/* para possibilitar a conexao deste processo com o debugger.    */
+/* Modifique manualmente a variavel attached para continuar.     */
+/*****************************************************************/
 void Attach_debugger(int meu_ranque, int processo_objetivo){
     int attached = 0;
 

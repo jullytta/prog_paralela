@@ -21,16 +21,6 @@ void Parallel_matrix_mult(MATRIX_T A, MATRIX_T B, MATRIX_T C, int n);
 void Print_matrix(float **matrix, int n, int m);
 void Malloc_matrix(float ***matrix, int n, int m);
 
-// A alocacao aqui tem um pouquinho de gambiarra para garantir
-// que a matriz seja continua na memoria (necessario para
-// usar os tipos derivados)
-void Malloc_matrix(float ***matrix, int n, int m){
-    int i;
-    *matrix = malloc(n*sizeof(float*));
-    (*matrix)[0] = malloc(n*m*sizeof(float));
-    for(i = 1; i < n; i++)
-        (*matrix)[i] = &((*matrix)[0][i*m]);
-}
 
 int main (int argc, char *argv[]) {
     int i, j, n, p, meu_ranque, raiz = 0;
@@ -141,19 +131,6 @@ int main (int argc, char *argv[]) {
     }
     #endif
 
-// To tentando deletar o trecho abaixo, mas da seg fault quando o faco
-    int k = 0;
-    float envio[5][5];
-    for(i = 0; i < 5; i++){
-        for(j = 0; j < 5; j++){
-            envio[i][j] = k++;
-        }
-    }
-
-    float recibo[5][5];
-    float *recibo2 = (float*) malloc(meu_tamanho*n*sizeof(float));
-// fim
-
     // Cria o tipo para a coluna da sub matriz
     // Importante ter um tipo diferente porque a sub matriz tem um
     // numero menor de colunas, portanto o salto tambem e' menor
@@ -163,7 +140,9 @@ int main (int argc, char *argv[]) {
                  tipo_linha, *sub_A, meu_tamanho,
                  tipo_linha, raiz, MPI_COMM_WORLD);
 
-// Mais uma parte do programa que eu nao consigo apagar
+// Uma parte do programa que eu nao consigo apagar
+// TODO(jullytta): remover esse bloco de codigo sem gerar seg fault
+{
     MPI_Aint lim_inf, extensao;
     MPI_Type_get_extent(MPI_FLOAT, &lim_inf, &extensao);
     MPI_Datatype coluna_recebida, tipo_coluna_recebida;
@@ -171,7 +150,8 @@ int main (int argc, char *argv[]) {
     MPI_Type_commit(&coluna_recebida);
     MPI_Type_create_resized(coluna_recebida, lim_inf, extensao, &tipo_coluna_recebida);
     MPI_Type_commit(&tipo_coluna_recebida);
-// gente socorro    
+}
+// gente socorro
 
     MPI_Scatterv(*B, tamanhos, deslocamentos,
                  tipo_coluna, *sub_B, meu_tamanho,
@@ -270,3 +250,15 @@ void Print_matrix(float **matrix, int n, int m) {
         printf("\n");
     }
 }  /* Print_matrix */
+
+/*****************************************************************/
+/* A alocacao aqui tem um pouquinho de gambiarra para garantir   */
+/* que a matriz seja continua na memoria (necessario para usar   */
+/* os tipos derivados)                                           */
+void Malloc_matrix(float ***matrix, int n, int m){
+    int i;
+    *matrix = malloc(n*sizeof(float*));
+    (*matrix)[0] = malloc(n*m*sizeof(float));
+    for(i = 1; i < n; i++)
+        (*matrix)[i] = &((*matrix)[0][i*m]);
+} /* Malloc_matrix */

@@ -82,7 +82,7 @@ int main (int argc, char *argv[]){
   tempo_final = omp_get_wtime();
 	
   #ifdef STATS_FLAG
-	printf("%f\t", tempo_final-tempo_inicial);
+  printf("%f\t", tempo_final-tempo_inicial);
   #endif
 
   return 0;

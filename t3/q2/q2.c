@@ -1,3 +1,14 @@
+// RankSort (Enumeration Sort) Paralelo em OpenMP
+// Entrada: vetor de ate 10^8 numeros distintos
+// Saida: vetor ordenado
+// Ultima revisão 10/12/2016
+
+// Algoritmo
+// 1. A thread master le a entrada.
+// 2. Cada thread calcula uma parcela dos ranques.
+// 3. Cada thread monta uma parte do vetor ordenado
+// usando os ranques anteriormente calculados.
+
 #include <omp.h>
 #include <stdio.h>
 #include <stdlib.h>

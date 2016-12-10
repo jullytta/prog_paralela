@@ -30,29 +30,29 @@ void imprime_vetor(double *v, int tam){
 
 int main (int argc, char *argv[]){
 
-	int n, i, j;
+  int n, i, j;
   int *ranques;
   double *a, *b;
   double tempo_inicial, tempo_final;
 
-	omp_set_num_threads(NUM_THREADS);
+  omp_set_num_threads(NUM_THREADS);
 
-	a = (double*) malloc(MAX_TAM * sizeof(double));
+  a = (double*) malloc(MAX_TAM * sizeof(double));
 
   n = 0;
   while(scanf("%lf", &a[n]) != EOF)
     n++;
 
-	b = (double*) malloc(n * sizeof(double));
-	ranques = (int*) malloc(n * sizeof(int));
+  b = (double*) malloc(n * sizeof(double));
+  ranques = (int*) malloc(n * sizeof(int));
 
   #ifdef DEBUG_FLAG
   printf("Vetor original: "); imprime_vetor(a, n);
   #endif
 
-	tempo_inicial = omp_get_wtime();
+  tempo_inicial = omp_get_wtime();
 
-	/* Cada thread calcula uma parcela dos ranques */
+  /* Cada thread calcula uma parcela dos ranques */
   #pragma omp parallel for \
           shared(a, ranques, n) \
           private(i, j) \
@@ -79,7 +79,7 @@ int main (int argc, char *argv[]){
   printf("Vetor ordenado: "); imprime_vetor(b, n);
   #endif
 
-	tempo_final = omp_get_wtime();
+  tempo_final = omp_get_wtime();
 	
   #ifdef STATS_FLAG
 	printf("%f\t", tempo_final-tempo_inicial);

@@ -15,7 +15,7 @@
 #include <math.h>
 
 #define NUM_THREADS 4
-#define MAX_TAM 10
+#define MAX_TAM 100000000
 
 void imprime_vetor(double *v, int tam){
   int i;
@@ -83,6 +83,9 @@ int main (int argc, char *argv[]){
 	
   #ifdef STATS_FLAG
   printf("%f\t", tempo_final-tempo_inicial);
+  #else
+  for(i = 0; i < n; i++)
+    printf("%g\n", b[i]);
   #endif
 
   return 0;

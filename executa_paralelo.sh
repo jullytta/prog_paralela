@@ -40,7 +40,7 @@ fi
 # TODO(jullytta): Adicionar passagem de argumentos.
 
 # Diferentes numeros de processos
-for n in 1 2 4 6 8
+for n in 1 2 4 8 16
 do
   i=0
   # Adiciona a quantidade de processos a linha do output para uso posterior

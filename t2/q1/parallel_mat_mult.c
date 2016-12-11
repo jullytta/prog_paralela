@@ -20,7 +20,7 @@
 #include "mpi.h"
 
 
-void Attach_debugger(int meu_ranque, int processo_objetivo);
+void Attach_debugger(int my_rank, int target, MPI_Comm comm);
 void Create_Column_Type(MPI_Datatype *tipo_coluna, int n, int m);
 void Malloc_matrix(float ***matrix, int n, int m);
 void Matrix_mult(float **A, float **B, float **C,
@@ -42,7 +42,7 @@ int main (int argc, char *argv[]) {
     MPI_Comm_size(MPI_COMM_WORLD, &p);
 
     #ifdef GDB_FLAG
-    Attach_debugger(meu_ranque, raiz);
+    Attach_debugger(meu_ranque, raiz, MPI_COMM_WORLD);
     #endif
 
     if(meu_ranque == raiz){
@@ -202,14 +202,17 @@ int main (int argc, char *argv[]) {
 /* para possibilitar a conexao deste processo com o debugger.    */
 /* Modifique manualmente a variavel attached para continuar.     */
 /*****************************************************************/
-void Attach_debugger(int meu_ranque, int processo_objetivo){
+void Attach_debugger(int my_rank, int target, MPI_Comm comm){
     int attached = 0;
 
-    if(meu_ranque == processo_objetivo){
+    if(my_rank == target){
         while(!attached){
             sleep(1);
         }
     }
+    
+    MPI_Barrier(comm);
+
 } /* Attach_debugger */
 
 

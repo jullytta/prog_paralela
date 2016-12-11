@@ -62,7 +62,8 @@ int main (int argc, char *argv[]){
   #pragma omp parallel for \
           shared(marcacoes, n) \
           private(i, j) \
-          default(none)
+          default(none) \
+          schedule(dynamic, 1)
   for(i = 2; i < n; i++){
     for(j = 2; i*j < n; j++){
       marcacoes[i*j] = 1;
@@ -70,6 +71,8 @@ int main (int argc, char *argv[]){
   }
 
   n_primos = 0;
+  /* Cada thread conta quantos primos existem na    */
+  /* sua parcela do vetor de marcacoes.             */
   #pragma omp parallel for \
           shared(marcacoes, n) \
           private(i) \

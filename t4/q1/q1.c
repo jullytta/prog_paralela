@@ -53,6 +53,10 @@ int main (int argc, char *argv[]) {
   // do arquivo
   offset = sizeof(int) + meu_ranque*meu_tamanho;
 
+  #ifdef DEBUG_FLAG
+  printf("Processo %d, offset %d.\n", meu_ranque, offset);
+  #endif
+
   // O ultimo processo fica com as sobras
   if(meu_ranque == num_procs-1){
     num_doubles += (n%num_procs)*2;

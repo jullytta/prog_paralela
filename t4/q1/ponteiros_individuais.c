@@ -13,14 +13,12 @@
 
 int main(int argc, char **argv) {
 
-  double *x, *y, *buffer_x, *buffer_y;
+  double *x, *y, *buffer_read;
   double mySUMx, mySUMy, mySUMxy, mySUMxx, SUMx, SUMy, SUMxy,
          SUMxx, SUMres, res, slope, y_intercept, y_estimate;
 
-  double tempo_inicial, tempo_final;
-
   int i, j, n, myid, numprocs, naverage, nremain,
-      mypoints, ishift;
+      mypoints, mysize;
 
   MPI_Offset offset;
   MPI_File file;
@@ -43,18 +41,42 @@ int main(int argc, char **argv) {
 
   // Cada processo calcula o quanto vai ler e seu offset
   naverage = n/numprocs;
-  nremain = n % numprocs;
-  ishift = myid*naverage;
-  mypoints = (myid < numprocs -1) ? naverage : naverage + nremain;
+  nremain = n%numprocs;
+  mypoints = naverage;
+  mysize = naverage*2*sizeof(double);
+
+  offset = sizeof(int) + mysize*myid;
+
+  #ifdef DEBUG_FLAG
+  printf("Processo %d, offset %d\n", myid, offset);
+  #endif
+
+  if(myid == numprocs-1){
+    mypoints += nremain;
+    mysize += nremain*2*sizeof(double);
+  }
 
   // Processos movem os ponteiros individuais para
   // as posicoes corretas
+  MPI_File_set_view(file, offset, MPI_DOUBLE, MPI_DOUBLE,
+     "native", MPI_INFO_NULL);
 
   // Alocacao de memoria para os vetores de x e y
+  // e o buffer de leitura
   x = (double *) malloc (mypoints*sizeof(double));
   y = (double *) malloc (mypoints*sizeof(double)); 
+  buffer_read = (double *) malloc (mysize);
 
   // Leitura do arquivo
+  MPI_File_read(file, buffer_read, mypoints*2,
+     MPI_DOUBLE, &status);
+
+  #ifdef DEBUG_FLAG
+  printf("Processo %d, %d pontos lidos:\n", myid, mypoints);
+  for(i = 0; i < mypoints*2; i++)
+    printf("%.2f\t", buffer_read[i]);
+  printf("\n");
+  #endif
 
   // Fecha o arquivo
   MPI_File_close(&file);
@@ -63,10 +85,10 @@ int main(int argc, char **argv) {
   mySUMx = 0; mySUMy = 0; mySUMxy = 0; mySUMxx = 0;
   
   for (j = 0; j < mypoints; j++) {
-    mySUMx = mySUMx + x[ishift+j];
-    mySUMy = mySUMy + y[ishift+j];
-    mySUMxy = mySUMxy + x[ishift+j]*y[ishift+j];
-    mySUMxx = mySUMxx + x[ishift+j]*x[ishift+j];
+    mySUMx = mySUMx + x[j];
+    mySUMy = mySUMy + y[j];
+    mySUMxy = mySUMxy + x[j]*y[j];
+    mySUMxx = mySUMxx + x[j]*x[j];
   }
   
   // Reducao das somas

@@ -38,8 +38,8 @@ int main(int argc, char **argv) {
   if(myid == 0){
     MPI_File_seek(file, 0, MPI_SEEK_SET);
     MPI_File_read(file, &n, 1, MPI_INT, &status);
-    MPI_Bcast(&n, 1, MPI_INT, 0, MPI_COMM_WORLD);
   }
+  MPI_Bcast(&n, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
   // Cada processo calcula o quanto vai ler e seu offset
   naverage = n/numprocs;

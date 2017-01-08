@@ -14,8 +14,9 @@
 int main(int argc, char **argv) {
 
   double *x, *y, *buffer_read;
-  double mySUMx, mySUMy, mySUMxy, mySUMxx, SUMx, SUMy, SUMxy,
-         SUMxx, SUMres, res, slope, y_intercept, y_estimate;
+  double mySUMx, mySUMy, mySUMxy, mySUMxx, mySUMres,
+         SUMx, SUMy, SUMxy, SUMxx, SUMres,
+         res, slope, y_intercept, y_estimate;
 
   int i, j, n, myid, numprocs, naverage, nremain,
       mypoints, mysize;
@@ -78,6 +79,17 @@ int main(int argc, char **argv) {
   printf("\n");
   #endif
 
+  // Passa o arquivo lido para os vetores locais x e y
+  j = 0;
+  for(i = 0; i < mypoints*2; i++){
+    if(i%2 == 0)
+      x[j] = buffer_read[i];
+    else{
+      y[j] = buffer_read[i];
+      j++;
+    }
+  }
+
   // Fecha o arquivo
   MPI_File_close(&file);
 
@@ -92,33 +104,42 @@ int main(int argc, char **argv) {
   }
   
   // Reducao das somas
-  MPI_Reduce(&mySUMx, &SUMx, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
-  MPI_Reduce(&mySUMy, &SUMy, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
-  MPI_Reduce(&mySUMxy, &SUMxy, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
-  MPI_Reduce(&mySUMxx, &SUMxx, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  // Utilizamos all reduce para que todos os processos possam
+  // estimar os parametros da reta e, em seguida, estimar valores
+  // para y em seus pontos.
+  MPI_Allreduce(&mySUMx, &SUMx, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+  MPI_Allreduce(&mySUMy, &SUMy, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+  MPI_Allreduce(&mySUMxy, &SUMxy, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+  MPI_Allreduce(&mySUMxx, &SUMxx, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 
-  // Processo zero faz os calculos finais
+  // Processos estimam os parametros da reta
+  slope = ( SUMx*SUMy - n*SUMxy ) / ( SUMx*SUMx - n*SUMxx );
+  y_intercept = ( SUMy - slope*SUMx ) / n;
+
+  // Processo zero imprime a mensagem inicial
   if (myid == 0) {
-    slope = ( SUMx*SUMy - n*SUMxy ) / ( SUMx*SUMx - n*SUMxx );
-    y_intercept = ( SUMy - slope*SUMx ) / n;
-    
-    /* this call is used to achieve a consistent output format */
-    /*new_sleep (3);*/
     printf ("\n");
     printf ("The linear equation that best fits the given data:\n");
     printf ("       y = %6.2lfx + %6.2lf\n", slope, y_intercept);
     printf ("--------------------------------------------------\n");
     printf ("   Original (x,y)     Estimated y     Residual\n");
     printf ("--------------------------------------------------\n");
-    
-    SUMres = 0;
-    for (i=0; i<n; i++) {
-      y_estimate = slope*x[i] + y_intercept;
-      res = y[i] - y_estimate;
-      SUMres = SUMres + res*res;
-      printf ("   (%6.2lf %6.2lf)      %6.2lf       %6.2lf\n", 
-        x[i], y[i], y_estimate, res);
-    }
+  }
+
+  // Cada processo imprime seus pontos
+  mySUMres = 0;
+  for (i=0; i<mypoints; i++) {
+    y_estimate = slope*x[i] + y_intercept;
+    res = y[i] - y_estimate;
+    mySUMres += res*res;
+    printf ("   (%6.2lf %6.2lf)      %6.2lf       %6.2lf\n", 
+      x[i], y[i], y_estimate, res);
+  }
+
+  // A soma residual individual e' reduzida
+  MPI_Reduce(&mySUMres, &SUMres, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);  
+
+  if(myid == 0){
     printf("--------------------------------------------------\n");
     printf("Residual sum = %6.2lf\n", SUMres);
   }

@@ -6,7 +6,7 @@
 #include <time.h>
 #include "mpi.h"
 
-#define DEFAULT_N 10
+#define DEFAULT_N 5
 #define MAX_RAND_X 1000
 #define MAX_RAND_M 100
 #define MAX_RAND_B 1000
@@ -49,13 +49,9 @@ int main (int argc, char *argv[]) {
   // Tamanho ocupado pelos doubles, para cada processo
   meu_tamanho = num_doubles*sizeof(double);
 
-  // Calcula offsets
-  // O processo 0 vai escrever o N no inicio.
-  // Os outros processos devem considerar esse valor em seu offset
-  if(meu_ranque == 0)
-    offset = 0;
-  else
-    offset = sizeof(int) + meu_ranque*meu_tamanho;
+  // Calcula offsets, considerando que N sera escrito no inicio
+  // do arquivo
+  offset = sizeof(int) + meu_ranque*meu_tamanho;
 
   // O ultimo processo fica com as sobras
   if(meu_ranque == num_procs-1){
@@ -106,16 +102,25 @@ int main (int argc, char *argv[]) {
   #endif
 
   // Abre o arquivo para o qual escreveremos os dados
-  // TODO
+  MPI_File_open(MPI_COMM_WORLD, "xydata",
+     MPI_MODE_CREATE | MPI_MODE_WRONLY, MPI_INFO_NULL, &arquivo);
 
   // Primeira coisa a ser impressa no arquivo: o valor de n
-  // TODO
+  // Apenas o processo raiz fara isso
+  if(meu_ranque == 0){
+    MPI_File_seek(arquivo, 0, MPI_SEEK_SET);
+    MPI_File_write(arquivo, &n, 1, MPI_INT, MPI_STATUS_IGNORE);
+  }
+
+  // Move os ponteiros individuais para o lugar certo
+  MPI_File_seek(arquivo, offset, MPI_SEEK_SET);
 
   // Adiciona os pares gerados ao arquivo de saida
-  // TODO
+  MPI_File_write(arquivo, vet_escrita, num_doubles,
+     MPI_DOUBLE, MPI_STATUS_IGNORE);
 
   // Fecha o arquivo
-  // TODO
+  MPI_File_close(&arquivo);
 
   MPI_Finalize();
 

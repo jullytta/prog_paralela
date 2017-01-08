@@ -19,9 +19,11 @@ void geraParametros(double *m, double *b){
 
 int main (int argc, char *argv[]) {
 
-  int meu_ranque, num_procs, meu_tamanho;
+  int meu_ranque, num_procs, meu_tamanho, num_doubles;
   int i, n = DEFAULT_N;
   double m, b;
+  double *vet_escrita;
+
   MPI_Offset offset;
   MPI_File arquivo;
   MPI_Status estado;
@@ -39,53 +41,78 @@ int main (int argc, char *argv[]) {
   #endif
 
   // Calcula quantos pares (x, y) sao escritos pelo processo
-  meu_tamanho = n/num_procs;
+  num_doubles = n/num_procs;
+
+  // Cada par tem dois doubles, logo:
+  num_doubles *= 2;
+
+  // Tamanho ocupado pelos doubles, para cada processo
+  meu_tamanho = num_doubles*sizeof(double);
+
+  // Calcula offsets
+  // O processo 0 vai escrever o N no inicio.
+  // Os outros processos devem considerar esse valor em seu offset
+  if(meu_ranque == 0)
+    offset = 0;
+  else
+    offset = sizeof(int) + meu_ranque*meu_tamanho;
 
   // O ultimo processo fica com as sobras
   if(meu_ranque == num_procs-1){
-    meu_tamanho += n%num_procs;
+    num_doubles += (n%num_procs)*2;
+    meu_tamanho += (n%num_procs)*2*sizeof(double);
   }
 
   #ifdef DEBUG_FLAG
-  printf("Processo %d escreve %d pares.\n",
-     meu_ranque, meu_tamanho);
+  printf("Processo %d escreve %d pares, ocupando %d.\n",
+     meu_ranque, num_doubles/2, meu_tamanho);
   #endif
 
-  // Cada processo tem um offset diferente, mas todos devem
-  // considerar o N escrito no inicio
-
-  // Abre o arquivo para o qual escreveremos os dados
-  // TODO
+  // Aloca memoria para o vetor que sera escrito
+  vet_escrita = (double *) malloc(meu_tamanho);
 
   // Prepara para a criacao de numeros aleatorios
   // Semente deve ser diferente para cada processo para evitar
   // a geracao de numeros iguais.
   srand(time(NULL)+meu_ranque);
   
-  // Primeira coisa a ser impressa no arquivo: o valor de n
-  // TODO
-
-  // Seguido de n linhas de pares x, y que facam
-  // parte da equacao y = xm + b
-  for(i = 0; i < meu_tamanho; i++){
+  // Gera os pares aleatorios (x, y)
+  for(i = 0; i < num_doubles; i += 2){
     // Gera x aleatoriamente
     double x = rand()%MAX_RAND_X;
 
     // Encontra o y correto
     double y = x*m + b;
 
-    #ifdef DEBUG_FLAG
-    printf("x = %.2f\t\ty = %.2f\n", x, y);
-    #endif
-
     // Adiciona um erro aleatorio 'a coordenada y
     // para justicar a utilizacao de minimos quadrados
     // para encontrar a equacao
     y += rand()/(double)RAND_MAX;
 
-    // Adiciona o par gerado ao arquivo de saida
-    // TODO
+    #ifdef DEBUG_FLAG
+    printf("x = %.2f\t\ty = %.2f\n", x, y);
+    #endif
+
+    // Guarda os valores no vetor de escrita
+    vet_escrita[i] = x;
+    vet_escrita[i+1] = y;
   }
+
+  #ifdef DEBUG_FLAG
+  printf("Gerados pelo processo %d:\n", meu_ranque);
+  for(i = 0; i < num_doubles; i++)
+    printf("%.2f\t", vet_escrita[i]);
+  printf("\n");
+  #endif
+
+  // Abre o arquivo para o qual escreveremos os dados
+  // TODO
+
+  // Primeira coisa a ser impressa no arquivo: o valor de n
+  // TODO
+
+  // Adiciona os pares gerados ao arquivo de saida
+  // TODO
 
   // Fecha o arquivo
   // TODO
